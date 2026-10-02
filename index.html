@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A&H Printing Dropship System</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f6f2ff;color:#292642}
+.wrap{max-width:1100px;margin:auto;padding:16px}.card{background:#fff;border-radius:22px;padding:22px;margin:14px 0;box-shadow:0 8px 30px #30255a16}
+.center{text-align:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+button{border:0;border-radius:13px;padding:12px 16px;background:#30285f;color:#fff;font-weight:700;cursor:pointer;margin:4px 0}
+button.alt{background:#eee9fa;color:#30285f}button.danger{background:#d65370}button.ok{background:#3b8c6b}
+input,select,textarea{width:100%;padding:12px;border:1px solid #ddd5ed;border-radius:12px;margin:6px 0 12px;font-size:15px}
+label{font-weight:700;font-size:14px}.hidden{display:none!important}.msg{padding:12px;border-radius:12px;background:#eee9fa;margin:10px 0}.err{background:#ffe7ed}.success{background:#e4f7ed}
+.nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:15px}.nav button{width:auto}.box{border:1px solid #eee;border-radius:17px;padding:15px;margin:10px 0}
+.idbox{background:#f0eaff;border-radius:15px;padding:15px;text-align:center;font-weight:800;font-size:21px}
+table{width:100%;border-collapse:collapse;display:block;overflow-x:auto}th,td{padding:9px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap;font-size:13px}
+.pill{display:inline-block;background:#eee9fa;border-radius:20px;padding:5px 9px;margin:3px}.money{font-size:22px;font-weight:800}
+hr{border:0;border-top:1px solid #eee;margin:18px 0}.variant{background:#faf8ff;border:1px solid #e8e1f4;border-radius:14px;padding:12px;margin:8px 0}
+</style>
+</head>
+<body><div class="wrap"><div id="app"></div></div>
+<script>
+"use strict";
+const DB={users:"AH_USERS_AHPRINTING_V10",products:"AH_PRODUCTS_AHPRINTING_V10",orders:"AH_ORDERS_AHPRINTING_V10",colors:"AH_COLORS_AHPRINTING_V10",session:"AH_SESSION_AHPRINTING_V10"};
+const $=id=>document.getElementById(id);
+function read(k,d){try{let x=localStorage.getItem(k);return x===null?d:JSON.parse(x)}catch(e){return d}}
+function write(k,v){localStorage.setItem(k,JSON.stringify(v))}
+let users=read(DB.users,[]),products=read(DB.products,[]),orders=read(DB.orders,[]);
+if(!Array.isArray(products)||products.length===0){
+ products=[
+  {id:"P001",name:"Planner A5",colors:true,variants:[
+   {name:"Softcover",sell:15,drop:12},
+   {name:"Hardcover",sell:25,drop:20}
+  ]},
+  {id:"P002",name:"Buku Resit & Rekod",colors:false,variants:[
+   {name:"1 Ply",sell:10,drop:8},
+   {name:"2 Ply",sell:15,drop:12}
+  ]}
+ ];
+}
+let colors=read(DB.colors,["Navy","Lavender","Pink","Baby Blue","Mint","Cream","White","Black"]);
+let session=read(DB.session,null);
+if(!Array.isArray(users))users=[];if(!Array.isArray(products))products=[];if(!Array.isArray(orders))orders=[];if(!Array.isArray(colors))colors=[];
+
+function home(){
+$("app").innerHTML=`<div class="card center"><h1>🌸 A&H PRINTING</h1><p>Admin & Dropship System</p>
+<div class="grid">
+<div class="box"><h2>👑</h2><h3>LOGIN ADMIN</h3><button id="a">LOGIN ADMIN</button></div>
+<div class="box"><h2>🌸</h2><h3>LOGIN DROPSHIP</h3><button id="d">LOGIN DROPSHIP</button></div>
+<div class="box"><h2>📝</h2><h3>DAFTAR DROPSHIP BARU</h3><button id="r" class="alt">DAFTAR SEKARANG</button></div>
+</div></div>`;
+$("a").onclick=adminLoginPage;$("d").onclick=dropLoginPage;$("r").onclick=registerPage;
+}
+function msg(id,t,e){$(id).textContent=t;$(id).className="msg "+(e?"err":"success");$(id).classList.remove("hidden")}
+
+function adminLoginPage(){
+$("app").innerHTML=`<div class="card" style="max-width:500px;margin:auto"><h2>👑 Login Admin</h2><div id="m" class="msg hidden"></div>
+<label>ID Admin</label><input id="uid" value="zeera"><label>Password</label><input id="up" type="password">
+<button id="go">LOGIN ADMIN</button><button id="back" class="alt">← Kembali</button></div>`;
+$("go").onclick=()=>{if($("uid").value.trim().toLowerCase()==="zeera"&&$("up").value==="940707"){session={type:"admin"};write(DB.session,session);adminDashboard()}else msg("m","ID atau password admin salah.",true)};$("back").onclick=home;
+}
+function registerPage(){
+$("app").innerHTML=`<div class="card" style="max-width:600px;margin:auto"><h2>📝 Daftar Dropship Baru</h2><div id="rm" class="msg hidden"></div>
+<label>Nama penuh</label><input id="rn"><label>No. telefon</label><input id="rp"><label>Email</label><input id="re" type="email">
+<label>Password sendiri</label><input id="rpass" type="password"><label>Sahkan password</label><input id="rpass2" type="password">
+<button id="reg">DAFTAR DROPSHIP</button><button id="rb" class="alt">← Kembali</button></div>`;
+$("reg").onclick=register;$("rb").onclick=home;
+}
+function register(){
+let name=$("rn").value.trim(),phone=$("rp").value.trim(),email=$("re").value.trim().toLowerCase(),pass=$("rpass").value,p2=$("rpass2").value;
+if(!name||!phone||!email||!pass)return msg("rm","Sila isi semua maklumat.",true);
+if(pass.length<6)return msg("rm","Password minimum 6 aksara.",true);
+if(pass!==p2)return msg("rm","Password tidak sama.",true);
+if(users.some(u=>u.email===email))return msg("rm","Email sudah didaftarkan.",true);
+let n=1;while(users.some(u=>u.id==="AHDS-"+String(n).padStart(4,"0")))n++;
+let u={id:"AHDS-"+String(n).padStart(4,"0"),name,phone,email,password:pass,status:"Aktif"};users.push(u);write(DB.users,users);
+$("app").innerHTML=`<div class="card center" style="max-width:600px;margin:auto"><h2>🎉 Berjaya!</h2><div class="idbox">${u.id}</div><p>Email: <b>${u.email}</b></p><p>Password: <b>${u.password}</b></p><button id="rl">LOGIN DROPSHIP</button><button id="rh" class="alt">HOME</button></div>`;
+$("rl").onclick=()=>{dropLoginPage();setTimeout(()=>{$("du").value=u.id;$("dp").value=u.password},0)};$("rh").onclick=home;
+}
+function dropLoginPage(){
+$("app").innerHTML=`<div class="card" style="max-width:500px;margin:auto"><h2>🌸 Login Dropship</h2><div id="dm" class="msg hidden"></div>
+<label>ID Dropship atau Email</label><input id="du"><label>Password</label><input id="dp" type="password">
+<button id="dl">LOGIN DROPSHIP</button><button id="dr" class="alt">📝 Daftar Baru</button><button id="db" class="alt">← Kembali</button></div>`;
+$("dl").onclick=dropLogin;$("dr").onclick=registerPage;$("db").onclick=home;
+}
+function dropLogin(){
+let v=$("du").value.trim().toLowerCase(),p=$("dp").value;
+let u=users.find(x=>(String(x.id).toLowerCase()===v||String(x.email).toLowerCase()===v)&&String(x.password)===p);
+if(!u)return msg("dm","ID/email atau password salah.",true);
+if(u.status!=="Aktif")return msg("dm","Akaun tidak aktif.",true);
+session={type:"drop",id:u.id};write(DB.session,session);dropDashboard();
+}
+function currentDrop(){return session&&session.type==="drop"?users.find(u=>u.id===session.id):null}
+
+function adminNav(){return `<div class="nav"><button id="nd">Dashboard</button><button id="np">Produk</button><button id="nc">Warna</button><button id="ns">Dropship</button><button id="no">Order</button><button id="nl" class="danger">Logout</button></div>`}
+function bindAdmin(){ $("nd").onclick=adminDashboard;$("np").onclick=adminProducts;$("nc").onclick=adminColors;$("ns").onclick=adminDrops;$("no").onclick=adminOrders;$("nl").onclick=()=>{session=null;write(DB.session,null);home()} }
+function adminDashboard(){
+let profit=orders.reduce((s,o)=>s+(o.sellPrice-o.dropPrice)*o.qty,0);
+$("app").innerHTML=`<div class="card">${adminNav()}<h2>👑 Dashboard Admin</h2><div class="grid">
+<div class="box"><div class="money">${products.length}</div>Produk</div><div class="box"><div class="money">${users.length}</div>Dropship</div><div class="box"><div class="money">${orders.length}</div>Order</div><div class="box"><div class="money">RM${profit.toFixed(2)}</div>Untung</div></div></div>`;bindAdmin();
+}
+function adminProducts(){
+$("app").innerHTML=`<div class="card">${adminNav()}<h2>📦 Tambah Produk</h2>
+<label>Nama produk</label><input id="pn"><label>Produk perlukan varian?</label><select id="hv"><option value="yes">Ya</option><option value="no">Tidak</option></select>
+<div id="vars"></div><button id="av" class="alt">+ Tambah Varian</button>
+<label>Produk perlukan warna?</label><select id="hc"><option value="no">Tidak</option><option value="yes">Ya — Border / Base / Font</option></select>
+<div id="simplePrice" class="hidden"><label>Harga jualan</label><input id="ss" type="number" step=".01"><label>Harga dropship</label><input id="sd" type="number" step=".01"></div>
+<button id="save">SIMPAN PRODUK</button><hr><h3>Produk Sedia Ada</h3><div id="pl"></div></div>`;bindAdmin();
+function addVar(){let d=document.createElement("div");d.className="variant";d.innerHTML=`<label>Nama varian</label><input class="vn" placeholder="Softcover"><label>Harga jualan</label><input class="vs" type="number" step=".01"><label>Harga dropship</label><input class="vd" type="number" step=".01">`;$("vars").appendChild(d)}
+addVar();$("av").onclick=addVar;$("hv").onchange=()=>{if($("hv").value==="yes"){if(!$("vars").children.length)addVar();$("vars").classList.remove("hidden");$("av").classList.remove("hidden");$("simplePrice").classList.add("hidden")}else{$("vars").innerHTML="";$("av").classList.add("hidden");$("simplePrice").classList.remove("hidden")}};
+$("save").onclick=()=>{
+let name=$("pn").value.trim(),variants=[];
+if(!name)return alert("Masukkan nama produk.");
+if($("hv").value==="yes")variants=[...$("vars").querySelectorAll(".variant")].map(d=>({name:d.querySelector(".vn").value.trim(),sell:Number(d.querySelector(".vs").value),drop:Number(d.querySelector(".vd").value)})).filter(v=>v.name&&v.sell>0&&v.drop>0);
+else{let s=Number($("ss").value),d=Number($("sd").value);if(!(s>0&&d>0))return alert("Masukkan harga.");variants=[{name:"Standard",sell:s,drop:d}]}
+if(!variants.length)return alert("Masukkan sekurang-kurangnya satu varian.");
+products.push({id:"P"+Date.now(),name,variants,colors:$("hc").value==="yes"});write(DB.products,products);adminProducts()
+};
+$("pl").innerHTML=products.length?products.map((p,i)=>`<div class="box"><h3>${p.name}</h3>${p.variants.map(v=>`<span class="pill">${v.name}: Jual RM${v.sell.toFixed(2)} / Dropship RM${v.drop.toFixed(2)}</span>`).join("")}<br>Warna: ${p.colors?"Border + Base + Font":"Tidak perlu warna"}<br><button class="danger" onclick="delProduct(${i})">Padam</button></div>`).join(""):"Belum ada produk.";
+}
+function delProduct(i){products.splice(i,1);write(DB.products,products);adminProducts()}
+function adminColors(){
+$("app").innerHTML=`<div class="card">${adminNav()}<h2>🎨 Color Library</h2><input id="cn" placeholder="Contoh: Gold"><button id="addc">+ Tambah Warna</button><div>${colors.map((c,i)=>`<span class="pill">${c} <button class="danger" onclick="delColor(${i})">×</button></span>`).join("")}</div></div>`;bindAdmin();$("addc").onclick=()=>{let c=$("cn").value.trim();if(c&&!colors.includes(c)){colors.push(c);write(DB.colors,colors)}adminColors()}
+}
+function delColor(i){colors.splice(i,1);write(DB.colors,colors);adminColors()}
+function adminDrops(){
+$("app").innerHTML=`<div class="card">${adminNav()}<h2>👥 Senarai Dropship</h2><table><tr><th>ID</th><th>Nama</th><th>Email</th><th>Status</th><th>Order</th><th>Untung Dropship</th><th></th></tr>
+${users.length?users.map((u,i)=>{let oo=orders.filter(o=>o.dropId===u.id),pr=oo.reduce((s,o)=>s+(o.sellPrice-o.dropPrice)*o.qty,0);return `<tr><td>${u.id}</td><td>${u.name}</td><td>${u.email}</td><td>${u.status}</td><td>${oo.length}</td><td>RM${pr.toFixed(2)}</td><td><button onclick="toggleUser(${i})">${u.status==="Aktif"?"Nyahaktif":"Aktifkan"}</button></td></tr>`}).join(""):"<tr><td colspan=7>Belum ada dropship.</td></tr>"}</table></div>`;bindAdmin();
+}
+function toggleUser(i){users[i].status=users[i].status==="Aktif"?"Tidak Aktif":"Aktif";write(DB.users,users);adminDrops()}
+function adminOrders(){
+$("app").innerHTML=`<div class="card">${adminNav()}<h2>🧾 Senarai Order</h2><p class="msg">Tekan <b>Detail</b> untuk lihat maklumat pelanggan. Admin juga boleh kemas kini status dan nombor tracking.</p><table><tr><th>Order</th><th>Dropship</th><th>Produk</th><th>Varian</th><th>Qty</th><th>Jualan</th><th>Dropship</th><th>Untung</th><th>Warna</th><th>Pelanggan</th><th>Resit</th><th>Status</th><th>No Tracking</th></tr>
+${orders.length?orders.map((o,i)=>`<tr><td>${o.id}</td><td>${o.dropId}</td><td>${o.product}</td><td>${o.variant}</td><td>${o.qty}</td><td>RM${o.sellPrice.toFixed(2)}</td><td>RM${o.dropPrice.toFixed(2)}</td><td>RM${((o.sellPrice-o.dropPrice)*o.qty).toFixed(2)}</td><td>${o.colors?o.border+" / "+o.base+" / "+o.font:"-"}</td><td><button onclick="customerDetail(${i})">Detail</button></td><td>${o.receipt?`<button onclick="receipt(${i})">Lihat</button>`:"Tiada"}</td><td><select onchange="status(${i},this.value)">${["Pending","Diproses","Siap","Dihantar","Selesai","Ditolak"].map(s=>`<option ${o.status===s?"selected":""}>${s}</option>`).join("")}</select></td><td><input id="trk${i}" value="${o.tracking||''}" placeholder="No tracking" style="min-width:150px"><button onclick="saveTracking(${i})">Simpan</button></td></tr>`).join(""):`<tr><td colspan="13">Belum ada order.</td></tr>`}</table></div>`;bindAdmin();
+}
+function status(i,s){orders[i].status=s;write(DB.orders,orders);adminOrders()}
+function saveTracking(i){orders[i].tracking=$("trk"+i).value.trim();write(DB.orders,orders);alert("No tracking berjaya disimpan.");adminOrders()}
+function customerDetail(i){
+  let o=orders[i];
+  let old=document.getElementById('customerModal');
+  if(old) old.remove();
+  const safe=v=>String(v??'-').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])).replace(/\n/g,'<br>');
+  document.body.insertAdjacentHTML('beforeend',`<div id="customerModal" style="position:fixed;inset:0;background:rgba(30,24,60,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;overflow:auto">
+    <div style="background:#fff;width:min(720px,96vw);max-height:92vh;overflow:auto;border-radius:28px;padding:24px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Arial,sans-serif;color:#292642">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+        <h2 style="margin:0;font-size:28px">👤 Detail Pelanggan</h2>
+        <button onclick="document.getElementById('customerModal').remove()" style="border:0;background:#d65372;color:white;border-radius:14px;padding:10px 15px;font-size:18px;font-weight:700">✕</button>
+      </div>
+      <div style="display:grid;gap:12px">
+        <div style="background:#f6f2ff;border-radius:16px;padding:15px"><b>🧾 No. Order</b><div style="font-size:20px;margin-top:6px">${safe(o.id)}</div></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div style="background:#fafafa;border-radius:16px;padding:15px"><b>👤 Nama</b><div style="font-size:18px;margin-top:6px">${safe(o.customerName)}</div></div>
+          <div style="background:#fafafa;border-radius:16px;padding:15px"><b>📞 Telefon</b><div style="font-size:18px;margin-top:6px">${safe(o.customerPhone)}</div></div>
+        </div>
+        <div style="background:#fafafa;border-radius:16px;padding:15px"><b>📍 Alamat</b><div style="font-size:18px;line-height:1.55;margin-top:6px">${safe(o.customerAddress)}</div></div>
+        <div style="background:#fafafa;border-radius:16px;padding:15px"><b>📝 Catatan</b><div style="font-size:18px;line-height:1.55;margin-top:6px">${safe(o.note)}</div></div>
+        <div style="background:#fafafa;border-radius:16px;padding:15px"><b>📦 Produk</b><div style="font-size:18px;margin-top:6px">${safe(o.product)} — ${safe(o.variant)} × ${safe(o.qty)}</div></div>
+        ${o.colors?`<div style="background:#fafafa;border-radius:16px;padding:15px"><b>🎨 Warna</b><div style="font-size:18px;line-height:1.6;margin-top:6px">Border: ${safe(o.border)}<br>Base: ${safe(o.base)}<br>Font: ${safe(o.font)}</div></div>`:''}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div style="background:#fff4d9;border-radius:16px;padding:15px"><b>📌 Status</b><div style="font-size:18px;margin-top:6px">${safe(o.status||'Pending')}</div></div>
+          <div style="background:#eaf8ef;border-radius:16px;padding:15px"><b>🚚 No Tracking</b><div style="font-size:18px;margin-top:6px">${safe(o.tracking||'Belum dimasukkan')}</div></div>
+        </div>
+      </div>
+    </div>
+  </div>`);
+}
+function receipt(i){
+  let r=orders[i].receipt;if(!r)return;
+  let old=document.getElementById('receiptModal');if(old)old.remove();
+  let isPdf=r.startsWith('data:application/pdf');
+  document.body.insertAdjacentHTML('beforeend',`<div id="receiptModal" style="position:fixed;inset:0;background:rgba(20,15,45,.72);z-index:10000;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;overflow:auto">
+    <div style="background:#fff;width:min(900px,98vw);height:min(94vh,900px);border-radius:24px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 70px rgba(0,0,0,.35)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:#30285f;color:#fff;flex:0 0 auto">
+        <div style="font-size:20px;font-weight:800">🧾 Resit Bayaran</div>
+        <button onclick="document.getElementById('receiptModal').remove()" style="border:0;background:#d65372;color:#fff;border-radius:12px;padding:9px 14px;font-size:17px;font-weight:800">✕ Tutup</button>
+      </div>
+      <div style="flex:1;overflow:auto;background:#f3f0fa;display:flex;align-items:flex-start;justify-content:center;padding:12px;box-sizing:border-box">
+        ${isPdf?`<iframe src="${r}" title="Resit PDF" style="width:100%;height:100%;min-height:600px;border:0;border-radius:12px;background:#fff"></iframe>`:`<img src="${r}" alt="Resit bayaran" style="display:block;max-width:100%;height:auto;object-fit:contain;border-radius:12px;background:#fff;box-shadow:0 3px 15px rgba(0,0,0,.12)">`}
+      </div>
+    </div>
+  </div>`);
+}
+
+function dropNav(){return `<div class="nav"><button id="dh">Produk</button><button id="do">List Order Saya</button><button id="dp">Keuntungan Saya</button><button id="dl" class="danger">Logout</button></div>`}
+function bindDrop(){$("dh").onclick=dropDashboard;$("do").onclick=dropOrders;$("dp").onclick=dropProfit;$("dl").onclick=()=>{session=null;write(DB.session,null);home()}}
+function dropDashboard(){
+let u=currentDrop();if(!u)return dropLoginPage();
+$("app").innerHTML=`<div class="card">${dropNav()}<h2>🌸 Hai ${u.name}</h2>
+<div class="idbox">${u.id}</div>
+<button id="newOrder" style="width:100%;font-size:18px;padding:16px">🛒 BUAT ORDER BARU</button>
+<h3>📦 Pilih Produk</h3>
+<div class="grid">${products.length?products.map((p,i)=>`<div class="box">
+<h3>${p.name}</h3>
+${p.variants.map(v=>`<span class="pill">${v.name} — RM${v.drop.toFixed(2)}</span>`).join("")}
+${p.colors?`<p>🎨 Border • Base • Font</p>`:""}
+<button onclick="orderPage(${i})">ORDER PRODUK INI</button>
+</div>`).join(""):"<p>Belum ada produk.</p>"}</div></div>`;
+bindDrop();
+$("newOrder").onclick=()=>{
+ if(!products.length){alert("Belum ada produk. Admin perlu tambah produk dahulu.");return}
+ orderPage(0);
+};
+}
+
+function orderPage(pi){
+let p=products[pi],u=currentDrop();
+$("app").innerHTML=`<div class="card"><button id="ob" class="alt">← Kembali</button><h2>🛒 Order Baru</h2><h3>${p.name}</h3>
+<label>Varian</label><select id="ov">${p.variants.map((v,i)=>`<option value="${i}">${v.name} — Jual RM${v.sell.toFixed(2)} / Dropship RM${v.drop.toFixed(2)}</option>`).join("")}</select>
+${p.colors?`<div class="grid"><div><label>Warna Border</label><select id="border">${colors.map(c=>`<option>${c}</option>`).join("")}</select></div><div><label>Warna Base</label><select id="base">${colors.map(c=>`<option>${c}</option>`).join("")}</select></div><div><label>Warna Font</label><select id="font">${colors.map(c=>`<option>${c}</option>`).join("")}</select></div></div>`:""}
+<label>Kuantiti</label><input id="oq" type="number" min="1" value="1"><label>Nama pelanggan</label><input id="cname"><label>Telefon pelanggan</label><input id="cphone"><label>Alamat pelanggan</label><textarea id="caddress"></textarea><label>Catatan</label><textarea id="cnote"></textarea>
+<label>Resit bayaran (gambar/PDF, maksimum 4MB)</label><input id="file" type="file" accept="image/*,.pdf"><button id="send">HANTAR ORDER</button></div>`;
+$("ob").onclick=dropDashboard;$("send").onclick=async()=>{
+let v=p.variants[Number($("ov").value)],qty=Number($("oq").value);if(!(qty>0))return alert("Kuantiti tidak sah.");
+let receipt="",f=$("file").files[0];if(f){if(f.size>4*1024*1024)return alert("Resit maksimum 4MB.");receipt=await new Promise((res,rej)=>{let r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f)})}
+orders.push({id:"ORD-"+Date.now(),dropId:u.id,product:p.name,variant:v.name,qty,sellPrice:v.sell,dropPrice:v.drop,receipt,status:"Pending",colors:p.colors,border:p.colors?$("border").value:"",base:p.colors?$("base").value:"",font:p.colors?$("font").value:"",customerName:$("cname").value,customerPhone:$("cphone").value,customerAddress:$("caddress").value,note:$("cnote").value});
+write(DB.orders,orders);alert("Order berjaya dihantar.");dropOrders();
+}
+}
+function dropOrders(){
+let u=currentDrop(),mine=orders.filter(o=>o.dropId===u.id);
+$("app").innerHTML=`<div class="card">${dropNav()}<h2>🧾 List Order Saya</h2>${mine.length?mine.map(o=>`<div class="box"><h3>${o.id}</h3><p><b>${o.product}</b> — ${o.variant}</p><p>Qty: ${o.qty}</p><p>Harga jual: RM${o.sellPrice.toFixed(2)}<br>Harga dropship: RM${o.dropPrice.toFixed(2)}<br><b>Untung: RM${((o.sellPrice-o.dropPrice)*o.qty).toFixed(2)}</b></p><p><b>📌 Status: ${o.status||'Pending'}</b></p><p><b>🚚 No Tracking:</b> ${o.tracking||'Belum dimasukkan'}</p><div class="msg"><b>👤 Maklumat Pelanggan</b><br>Nama: ${o.customerName||'-'}<br>Telefon: ${o.customerPhone||'-'}<br>Alamat: ${(o.customerAddress||'-').replace(/\n/g,'<br>')}<br>Catatan: ${o.note||'-'}</div>${o.colors?`<p>🎨 Border: ${o.border} | Base: ${o.base} | Font: ${o.font}</p>`:""}${o.receipt?"<p>✅ Resit bayaran dimasukkan</p>":""}</div>`).join(""):"Belum ada order."}</div>`;bindDrop();
+}
+function dropProfit(){
+let u=currentDrop(),mine=orders.filter(o=>o.dropId===u.id),p=mine.reduce((s,o)=>s+(o.sellPrice-o.dropPrice)*o.qty,0),done=mine.filter(o=>o.status==="Selesai").reduce((s,o)=>s+(o.sellPrice-o.dropPrice)*o.qty,0);
+$("app").innerHTML=`<div class="card">${dropNav()}<h2>💰 Keuntungan Saya</h2><div class="grid"><div class="box"><div class="money">RM${p.toFixed(2)}</div>Jumlah keuntungan</div><div class="box"><div class="money">${mine.length}</div>Jumlah order</div></div></div>`;bindDrop();
+}
+home();
+</script></body></html>
