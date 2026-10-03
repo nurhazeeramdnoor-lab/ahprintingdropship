@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A&H Printing Dropship System</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f6f2ff;color:#292642}
+.wrap{max-width:1100px;margin:auto;padding:16px}.card{background:#fff;border-radius:22px;padding:22px;margin:14px 0;box-shadow:0 8px 30px #30255a16}
+.center{text-align:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+button{border:0;border-radius:13px;padding:12px 16px;background:#30285f;color:#fff;font-weight:700;cursor:pointer;margin:4px 0}
+button.alt{background:#eee9fa;color:#30285f}button.danger{background:#d65370}button.ok{background:#3b8c6b}
+input,select,textarea{width:100%;padding:12px;border:1px solid #ddd5ed;border-radius:12px;margin:6px 0 12px;font-size:15px}
+label{font-weight:700;font-size:14px}.hidden{display:none!important}.msg{padding:12px;border-radius:12px;background:#eee9fa;margin:10px 0}.err{background:#ffe7ed}.success{background:#e4f7ed}
+.nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:15px}.nav button{width:auto}.box{border:1px solid #eee;border-radius:17px;padding:15px;margin:10px 0}
+.idbox{background:#f0eaff;border-radius:15px;padding:15px;text-align:center;font-weight:800;font-size:21px}
+table{width:100%;border-collapse:collapse;display:block;overflow-x:auto}th,td{padding:9px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap;font-size:13px}
+.pill{display:inline-block;background:#eee9fa;border-radius:20px;padding:5px 9px;margin:3px}.money{font-size:22px;font-weight:800}
+hr{border:0;border-top:1px solid #eee;margin:18px 0}.variant{background:#faf8ff;border:1px solid #e8e1f4;border-radius:14px;padding:12px;margin:8px 0}
+</style>
+</head>
+<body><div class="wrap"><div id="app"><div class="card center" id="staticHome">
+<h1>🌸 A&H PRINTING</h1>
+<p>Admin &amp; Dropship System</p>
+<div class="grid">
+<div class="box"><h2>👑</h2><h3>LOGIN ADMIN</h3><button type="button" onclick="window.__openAdmin && window.__openAdmin()">LOGIN ADMIN</button></div>
+<div class="box"><h2>🌸</h2><h3>LOGIN DROPSHIP</h3><button type="button" onclick="window.__openDrop && window.__openDrop()">LOGIN DROPSHIP</button></div>
+<div class="box"><h2>📝</h2><h3>DAFTAR DROPSHIP BARU</h3><button type="button" class="alt" onclick="window.__openRegister && window.__openRegister()">DAFTAR SEKARANG</button></div>
+</div></div></div></div><script>
+window.addEventListener("error",function(e){
+  var a=document.getElementById("app");
+  if(a && !a.innerHTML.trim()){
+    a.innerHTML='<div class="card center"><h2>🌸 A&H PRINTING</h2><p>Sila refresh halaman.</p><button onclick="location.reload()">REFRESH</button></div>';
+  }
+});
+"use strict";
+const SUPABASE_URL="https://fvfoayhaerrvxwvyorja.supabase.co";
+const SUPABASE_KEY="sb_publishable_OgDhUWoGYeTAmiYfY9F77A_sSgqS9Gw";
+let sb=null;
+const $=id=>document.getElementById(id);
+let sessionUser=null, profile=null, products=[], colors=[];
+const statuses=["Pending","Diproses","Siap","Dihantar","Selesai","Ditolak"];
+const esc=v=>String(v??"").replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])).replace(/\n/g,"<br>");
+const money=n=>`RM${Number(n||0).toFixed(2)}`;
+async function getProfile(uid){const {data,error}=await sb.from("profiles").select("user_id,drop_id,name,phone,email,status,role,created_at").eq("user_id",uid).single();return error?null:data}
+async function loadProducts(){const r=await sb.from("products").select("id,name,colors,variants,created_at").order("created_at",{ascending:true});if(r.error){console.error("products:",r.error);products=[];return r.error}products=r.data||[];return null}
+async function loadColors(){const r=await sb.from("colors").select("name").order("name");if(r.error){console.error("colors:",r.error);colors=[];return r.error}colors=(r.data||[]).map(x=>x.name);return null}
+async function ensureDefaults(){
+ await loadProducts(); await loadColors();
+ if(profile?.role==="admin"){
+  if(!colors.length){await sb.from("colors").insert(["Navy","Lavender","Pink","Baby Blue","Mint","Cream","White","Black"].map(name=>({name})));await loadColors()}
+  if(!products.length){await sb.from("products").insert([
+   {id:"P001",name:"Planner A5",colors:true,variants:[{name:"Softcover",sell:15,drop:12},{name:"Hardcover",sell:25,drop:20}]},
+   {id:"P002",name:"Buku Resit & Rekod",colors:false,variants:[{name:"1 Ply",sell:10,drop:8},{name:"2 Ply",sell:15,drop:12}]}
+  ]);await loadProducts()}
+ }
+}
+function msg(id,t,e){const el=$(id);if(!el)return;el.textContent=t;el.className="msg "+(e?"err":"success");el.classList.remove("hidden")}
+function home(){
+ $("app").innerHTML=`<div class="card center"><h1>🌸 A&H PRINTING</h1><p>Admin & Dropship System</p><div class="grid">
+ <div class="box"><h2>👑</h2><h3>LOGIN ADMIN</h3><button id="a">LOGIN ADMIN</button></div>
+ <div class="box"><h2>🌸</h2><h3>LOGIN DROPSHIP</h3><button id="d">LOGIN DROPSHIP</button></div>
+ <div class="box"><h2>📝</h2><h3>DAFTAR DROPSHIP BARU</h3><button id="r" class="alt">DAFTAR SEKARANG</button></div></div></div>`;
+ $("a").onclick=adminLoginPage;$("d").onclick=dropLoginPage;$("r").onclick=registerPage;
+}
+window.__openAdmin=adminLoginPage;window.__openDrop=dropLoginPage;window.__openRegister=registerPage;
+function requireSB(){if(sb)return true;alert("Sistem sedang dimuat. Tunggu beberapa saat dan cuba lagi.");return false}
+function adminLoginPage(){
+ $("app").innerHTML=`<div class="card" style="max-width:500px;margin:auto"><h2>👑 Login Admin</h2><div id="m" class="msg hidden"></div><label>ID Admin</label><input id="uid" value="zeera"><label>Password</label><input id="up" type="password"><button id="go">LOGIN ADMIN</button><button id="back" class="alt">← Kembali</button></div>`;
+ $("go").onclick=async()=>{if(!requireSB())return;const id=$("uid").value.trim().toLowerCase(),pw=$("up").value;if(id!=="zeera")return msg("m","ID admin salah.",true);const {data,error}=await sb.auth.signInWithPassword({email:"zeera@ahprinting.com",password:pw});if(error)return msg("m",error.message,true);profile=await getProfile(data.user.id);if(!profile||profile.role!=="admin")return msg("m","Akaun ini belum ditetapkan sebagai admin.",true);sessionUser=data.user;await ensureDefaults();adminDashboard()};$("back").onclick=home;
+}
+function registerPage(){
+ $("app").innerHTML=`<div class="card" style="max-width:600px;margin:auto"><h2>📝 Daftar Dropship Baru</h2><div id="rm" class="msg hidden"></div><label>Nama penuh</label><input id="rn"><label>No. telefon</label><input id="rp"><label>Email</label><input id="re" type="email"><label>Password sendiri</label><input id="rpass" type="password"><label>Sahkan password</label><input id="rpass2" type="password"><button id="reg">DAFTAR DROPSHIP</button><button id="rb" class="alt">← Kembali</button></div>`;
+ $("reg").onclick=register;$("rb").onclick=home;
+}
+async function register(){if(!requireSB())return;
+ const name=$("rn").value.trim(),phone=$("rp").value.trim(),email=$("re").value.trim().toLowerCase(),pass=$("rpass").value,p2=$("rpass2").value;
+ if(!name||!phone||!email||!pass)return msg("rm","Sila isi semua maklumat.",true);if(pass.length<6)return msg("rm","Password minimum 6 aksara.",true);if(pass!==p2)return msg("rm","Password tidak sama.",true);msg("rm","Sedang mendaftarkan...",false);
+ const {data,error}=await sb.auth.signUp({email,password:pass,options:{data:{name,phone}}});
+ if(error)return msg("rm",error.message,true);
+ if(data.user){
+  if(data.session){profile=await getProfile(data.user.id);sessionUser=data.user;if(profile){await ensureDefaults();dropDashboard();return}}
+  $("app").innerHTML=`<div class="card center" style="max-width:600px;margin:auto"><h2>🎉 Pendaftaran berjaya!</h2><p>ID dropship akan dijana automatik dalam database.</p><p>Sila sahkan email jika Supabase meminta pengesahan, kemudian login menggunakan email dan password yang didaftarkan.</p><button id="rl">LOGIN DROPSHIP</button><button id="rh" class="alt">HOME</button></div>`;$("rl").onclick=dropLoginPage;$("rh").onclick=home;
+ }
+}
+function dropLoginPage(){
+ $("app").innerHTML=`<div class="card" style="max-width:500px;margin:auto"><h2>🌸 Login Dropship</h2><div id="dm" class="msg hidden"></div><label>ID Dropship atau Email</label><input id="du"><label>Password</label><input id="dp" type="password"><button id="dl">LOGIN DROPSHIP</button><button id="dr" class="alt">📝 Daftar Baru</button><button id="db" class="alt">← Kembali</button></div>`;
+ $("dl").onclick=dropLogin;$("dr").onclick=registerPage;$("db").onclick=home;
+}
+async function dropLogin(){if(!requireSB())return;
+ let v=$("du").value.trim(),p=$("dp").value;if(!v||!p)return msg("dm","Sila isi ID/email dan password.",true);let email=v.toLowerCase();
+ if(!v.includes("@")){const {data,error}=await sb.from("profiles").select("email,status").eq("drop_id",v.toUpperCase()).eq("role","dropship").maybeSingle();if(error||!data)return msg("dm","ID dropship tidak dijumpai.",true);if(data.status!=="Aktif")return msg("dm","Akaun tidak aktif.",true);email=data.email}
+ const {data,error}=await sb.auth.signInWithPassword({email,password:p});if(error)return msg("dm",error.message,true);profile=await getProfile(data.user.id);if(!profile||profile.role!=="dropship")return msg("dm","Akaun dropship tidak dijumpai.",true);if(profile.status!=="Aktif")return msg("dm","Akaun tidak aktif.",true);sessionUser=data.user;await ensureDefaults();dropDashboard();
+}
+function adminNav(){return `<div class="nav"><button id="nd">Dashboard</button><button id="np">Produk</button><button id="nc">Warna</button><button id="ns">Dropship</button><button id="no">Order</button><button id="nl" class="danger">Logout</button></div>`}
+function bindAdmin(){
+ $("nd").onclick=adminDashboard;$("np").onclick=adminProducts;$("nc").onclick=adminColors;$("ns").onclick=adminDrops;$("no").onclick=adminOrders;$("nl").onclick=logout;
+}
+async function logout(){await sb.auth.signOut();sessionUser=null;profile=null;home()}
+async function adminDashboard(){
+ await loadProducts();const {data:ds}=await sb.from("profiles").select("user_id").eq("role","dropship");const {data:os}=await sb.from("orders").select("sell_price,drop_price,qty");const profit=(os||[]).reduce((s,o)=>s+(Number(o.sell_price)-Number(o.drop_price))*Number(o.qty),0);
+ $("app").innerHTML=`<div class="card">${adminNav()}<h2>👑 Dashboard Admin</h2><div class="grid"><div class="box"><div class="money">${products.length}</div>Produk</div><div class="box"><div class="money">${(ds||[]).length}</div>Dropship</div><div class="box"><div class="money">${(os||[]).length}</div>Order</div><div class="box"><div class="money">${money(profit)}</div>Untung</div></div></div>`;bindAdmin();
+}
+function adminProducts(){
+ $("app").innerHTML=`<div class="card">${adminNav()}<h2>📦 Produk</h2><div class="msg success">☁️ Produk disimpan dalam Supabase. Semua dropship akan melihat produk yang sama.</div><label>Nama produk</label><input id="pn"><label>Produk perlukan varian?</label><select id="hv"><option value="yes">Ya</option><option value="no">Tidak</option></select><div id="vars"></div><button id="av" class="alt">+ Tambah Varian</button><label>Produk perlukan warna?</label><select id="hc"><option value="no">Tidak</option><option value="yes">Ya — Border / Base / Font</option></select><div id="simplePrice" class="hidden"><label>Harga jualan</label><input id="ss" type="number" step=".01"><label>Harga dropship</label><input id="sd" type="number" step=".01"></div><button id="save">SIMPAN PRODUK</button><hr><h3>Produk Sedia Ada</h3><div id="pl"></div></div>`;bindAdmin();
+ function addVar(){const d=document.createElement("div");d.className="variant";d.innerHTML=`<label>Nama varian</label><input class="vn" placeholder="Softcover"><label>Harga jualan</label><input class="vs" type="number" step=".01"><label>Harga dropship</label><input class="vd" type="number" step=".01">`;$("vars").appendChild(d)}
+ addVar();$("av").onclick=addVar;$("hv").onchange=()=>{if($("hv").value==="yes"){$("vars").classList.remove("hidden");$("av").classList.remove("hidden");$("simplePrice").classList.add("hidden")}else{$("vars").innerHTML="";$("av").classList.add("hidden");$("simplePrice").classList.remove("hidden")}};
+ $("save").onclick=async()=>{let name=$("pn").value.trim(),variants=[];if(!name)return alert("Masukkan nama produk.");if($("hv").value==="yes")variants=[...$("vars").querySelectorAll(".variant")].map(d=>({name:d.querySelector(".vn").value.trim(),sell:Number(d.querySelector(".vs").value),drop:Number(d.querySelector(".vd").value)})).filter(v=>v.name&&v.sell>0&&v.drop>0);else{let s=Number($("ss").value),d=Number($("sd").value);if(!(s>0&&d>0))return alert("Masukkan harga.");variants=[{name:"Standard",sell:s,drop:d}]};if(!variants.length)return alert("Masukkan sekurang-kurangnya satu varian.");const {error}=await sb.from("products").upsert({id:"P"+Date.now(),name,variants,colors:$("hc").value==="yes"},{onConflict:"id"});if(error)return alert("Produk gagal disimpan: "+error.message);alert("Produk disimpan ke database. Semua dropship akan nampak produk ini.");await loadProducts();adminProducts()};
+ $("pl").innerHTML=products.length?products.map(p=>`<div class="box"><h3>${esc(p.name)}</h3>${(p.variants||[]).map(v=>`<span class="pill">${esc(v.name)}: Jual ${money(v.sell)} / Dropship ${money(v.drop)}</span>`).join("")}<br>Warna: ${p.colors?"Border + Base + Font":"Tidak perlu warna"}<br><button class="danger" onclick="delProductDB('${p.id}')">Padam</button></div>`).join(""):"Belum ada produk.";
+}
+async function delProductDB(id){if(!confirm("Padam produk ini?"))return;const {error}=await sb.from("products").delete().eq("id",id);if(error)alert(error.message);await loadProducts();adminProducts()}
+function adminColors(){
+ $("app").innerHTML=`<div class="card">${adminNav()}<h2>🎨 Color Library</h2><input id="cn" placeholder="Contoh: Gold"><button id="addc">+ Tambah Warna</button><div id="cl"></div></div>`;bindAdmin();renderColors();
+ function renderColors(){$("cl").innerHTML=colors.map(c=>`<span class="pill">${esc(c)} <button class="danger" onclick="delColorDB(${JSON.stringify(c)})">×</button></span>`).join("")||"Belum ada warna."}
+ $("addc").onclick=async()=>{const c=$("cn").value.trim();if(!c||colors.includes(c))return;const {error}=await sb.from("colors").insert({name:c});if(error)return alert(error.message);await loadColors();renderColors();$("cn").value=""}
+}
+async function delColorDB(c){const {error}=await sb.from("colors").delete().eq("name",c);if(error)alert(error.message);await loadColors();adminColors()}
+async function adminDrops(){
+ const {data:list,error}=await sb.from("profiles").select("user_id,drop_id,name,phone,email,status,created_at").eq("role","dropship").order("created_at",{ascending:false});if(error){$("app").innerHTML=`<div class="card">${adminNav()}<div class="msg err">${esc(error.message)}</div></div>`;bindAdmin();return}
+ $("app").innerHTML=`<div class="card">${adminNav()}<h2>👥 Senarai Dropship</h2><table><tr><th>ID</th><th>Nama</th><th>Telefon</th><th>Email</th><th>Status</th><th>Daftar</th></tr>${(list||[]).length?(list||[]).map(u=>`<tr><td>${esc(u.drop_id)}</td><td>${esc(u.name)}</td><td>${esc(u.phone)}</td><td>${esc(u.email)}</td><td><button onclick="toggleDropStatus('${u.user_id}','${u.status}')">${esc(u.status)}</button></td><td>${u.created_at?new Date(u.created_at).toLocaleString('ms-MY'):''}</td></tr>`).join(""):`<tr><td colspan="6">Belum ada dropship dalam database.</td></tr>`}</table></div>`;bindAdmin();
+}
+async function toggleDropStatus(uid,current){const next=current==="Aktif"?"Tidak Aktif":"Aktif";const {error}=await sb.from("profiles").update({status:next}).eq("user_id",uid);if(error)alert(error.message);adminDrops()}
+async function fetchOrders(){const {data,error}=await sb.from("orders").select("*").order("created_at",{ascending:false});return {data:data||[],error}}
+let adminOrdersCache=[];
+async function adminOrders(){
+ const {data,error}=await fetchOrders();
+ if(error){$("app").innerHTML=`<div class="card">${adminNav()}<div class="msg err">${esc(error.message)}</div></div>`;bindAdmin();return}
+ adminOrdersCache=data||[];
+ $("app").innerHTML=`<div class="card">${adminNav()}<h2>🧾 Senarai Order</h2><p class="msg">Tekan <b>Detail</b> atau <b>Lihat</b> untuk buka maklumat.</p><div style="overflow:auto"><table><tr><th>Order</th><th>Dropship</th><th>Produk</th><th>Varian</th><th>Qty</th><th>Jualan</th><th>Dropship</th><th>Untung</th><th>Warna</th><th>Pelanggan</th><th>Resit</th><th>Status</th><th>Tracking</th></tr>${adminOrdersCache.length?adminOrdersCache.map((o,i)=>`<tr><td>${esc(o.id)}</td><td>${esc(o.drop_id)}</td><td>${esc(o.product)}</td><td>${esc(o.variant)}</td><td>${o.qty}</td><td>${money(o.sell_price)}</td><td>${money(o.drop_price)}</td><td>${money((Number(o.sell_price)-Number(o.drop_price))*Number(o.qty))}</td><td>${o.colors?esc(o.border)+" / "+esc(o.base)+" / "+esc(o.font):"-"}</td><td><button class="detailBtn" data-index="${i}">Detail</button></td><td>${o.receipt_path?`<button class="receiptBtn" data-index="${i}">Lihat</button>`:"Tiada"}</td><td><select onchange="updateOrderStatus(${JSON.stringify(o.id)},this.value)">${statuses.map(st=>`<option ${o.status===st?"selected":""}>${st}</option>`).join("")}</select></td><td><input id="trk_${css(o.id)}" value="${esc(o.tracking||"")}" placeholder="No tracking" style="min-width:150px"><button onclick="saveTrackingDB(${JSON.stringify(o.id)})">Simpan</button></td></tr>`).join(""):`<tr><td colspan="13">Belum ada order.</td></tr>`}</table></div></div>`;
+ bindAdmin();
+ document.querySelectorAll('.detailBtn').forEach(b=>b.addEventListener('click',()=>showCustomerDetail(adminOrdersCache[Number(b.dataset.index)])));
+ document.querySelectorAll('.receiptBtn').forEach(b=>b.addEventListener('click',()=>showReceipt(adminOrdersCache[Number(b.dataset.index)])));
+}
+function css(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,"_")}
+async function updateOrderStatus(id,status){const {error}=await sb.from("orders").update({status}).eq("id",id);if(error)alert(error.message);else adminOrders()}
+async function saveTrackingDB(id){const el=$("trk_"+css(id));const {error}=await sb.from("orders").update({tracking:el?el.value.trim():""}).eq("id",id);if(error)alert(error.message);else{alert("No tracking berjaya disimpan.");adminOrders()}}
+function closeModal(id){const el=$(id);if(el)el.remove()}
+function showCustomerDetail(o){
+ if(!o){alert("Maklumat order tidak dijumpai.");return}
+ closeModal("customerModal");
+ const colorsHtml=o.colors?`<div class="box"><b>🎨 Warna</b><div>Border: ${esc(o.border)}<br>Base: ${esc(o.base)}<br>Font: ${esc(o.font)}</div></div>`:"";
+ document.body.insertAdjacentHTML("beforeend",`<div id="customerModal" style="position:fixed;inset:0;background:rgba(30,24,60,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto"><div style="background:#fff;width:min(720px,96vw);max-height:92vh;overflow:auto;border-radius:28px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><h2 style="margin:0">👤 Detail Pelanggan</h2><button type="button" id="closeCustomer" class="danger">✕</button></div><div class="grid"><div class="box"><b>🧾 No. Order</b><div>${esc(o.id)}</div></div><div class="box"><b>👤 Nama</b><div>${esc(o.customer_name)}</div></div><div class="box"><b>📞 Telefon</b><div>${esc(o.customer_phone)}</div></div><div class="box"><b>📍 Alamat</b><div>${esc(o.customer_address)}</div></div><div class="box"><b>📝 Catatan</b><div>${esc(o.note||"-")}</div></div><div class="box"><b>📦 Produk</b><div>${esc(o.product)} — ${esc(o.variant)} × ${esc(o.qty)}</div></div>${colorsHtml}<div class="box"><b>💰 Harga</b><div>Jualan: ${money(o.sell_price)}<br>Dropship: ${money(o.drop_price)}<br>Untung: ${money((Number(o.sell_price)-Number(o.drop_price))*Number(o.qty))}</div></div><div class="box"><b>📌 Status</b><div>${esc(o.status||"Pending")}</div></div><div class="box"><b>🚚 No Tracking</b><div>${esc(o.tracking||"Belum dimasukkan")}</div></div></div></div></div>`);
+ $("closeCustomer").onclick=()=>closeModal("customerModal");
+}
+function showReceipt(o){
+ if(!o||!o.receipt_path){alert("Resit tidak dijumpai.");return}
+ closeModal("receiptModal");
+ const src=String(o.receipt_path);
+ const isPdf=src.toLowerCase().startsWith("data:application/pdf")||/\.pdf($|\?)/i.test(src);
+ document.body.insertAdjacentHTML("beforeend",`<div id="receiptModal" style="position:fixed;inset:0;background:rgba(20,15,45,.72);z-index:10000;display:flex;align-items:center;justify-content:center;padding:10px"><div style="background:#fff;width:min(900px,98vw);height:min(94vh,900px);border-radius:24px;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#30285f;color:#fff"><b>🧾 Resit Bayaran</b><button type="button" id="closeReceipt" class="danger">✕ Tutup</button></div><div style="flex:1;overflow:auto;background:#f3f0fa;padding:12px;display:flex;justify-content:center;align-items:flex-start">${isPdf?`<iframe src="${esc(src)}" title="Resit PDF" style="width:100%;height:100%;min-height:650px;border:0;background:#fff"></iframe>`:`<img src="${esc(src)}" alt="Resit bayaran" style="max-width:100%;height:auto;object-fit:contain;border-radius:12px">`}</div></div></div>`);
+ $("closeReceipt").onclick=()=>closeModal("receiptModal");
+}
+window.showCustomerDetail=showCustomerDetail; window.showReceipt=showReceipt;
+
+
+function dropNav(){return `<div class="nav"><button id="dh">Produk</button><button id="do">List Order Saya</button><button id="dp">Keuntungan Saya</button><button id="dl" class="danger">Logout</button></div>`}
+function bindDrop(){$("dh").onclick=dropDashboard;$("do").onclick=dropOrders;$("dp").onclick=dropProfit;$("dl").onclick=logout}
+async function dropDashboard(){await loadProducts();await loadColors();$("app").innerHTML=`<div class="card">${dropNav()}<h2>🌸 Hai ${esc(profile.name)}</h2><div class="idbox">${esc(profile.drop_id)}</div><button id="newOrder" style="width:100%;font-size:18px;padding:16px">🛒 BUAT ORDER BARU</button><h3>📦 Pilih Produk</h3><div class="grid">${products.length?products.map((p,i)=>`<div class="box"><h3>${esc(p.name)}</h3>${(p.variants||[]).map(v=>`<span class="pill">${esc(v.name)} — ${money(v.drop)}</span>`).join("")}${p.colors?`<p>🎨 Border • Base • Font</p>`:""}<button onclick="orderPage(${i})">ORDER PRODUK INI</button></div>`).join(""):"<p>Belum ada produk.</p>"}</div></div>`;bindDrop();$("newOrder").onclick=()=>{if(products.length)orderPage(0);else alert("Belum ada produk.")}}
+function orderPage(pi){const p=products[pi];$("app").innerHTML=`<div class="card"><button id="ob" class="alt">← Kembali</button><h2>🛒 Order Baru</h2><h3>${esc(p.name)}</h3><label>Varian</label><select id="ov">${(p.variants||[]).map((v,i)=>`<option value="${i}">${esc(v.name)} — Jual ${money(v.sell)} / Dropship ${money(v.drop)}</option>`).join("")}</select>${p.colors?`<div class="grid"><div><label>Warna Border</label><select id="border">${colors.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div><div><label>Warna Base</label><select id="base">${colors.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div><div><label>Warna Font</label><select id="font">${colors.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div></div>`:""}<label>Kuantiti</label><input id="oq" type="number" min="1" value="1"><label>Nama pelanggan</label><input id="cname"><label>Telefon pelanggan</label><input id="cphone"><label>Alamat pelanggan</label><textarea id="caddress"></textarea><label>Catatan</label><textarea id="cnote"></textarea><label>Resit bayaran (gambar/PDF, maksimum 4MB)</label><input id="file" type="file" accept="image/*,.pdf"><button id="send">HANTAR ORDER</button></div>`;$("ob").onclick=dropDashboard;$("send").onclick=async()=>{const v=p.variants[Number($("ov").value)],qty=Number($("oq").value);if(!(qty>0))return alert("Kuantiti tidak sah.");if(!$("cname").value.trim()||!$("cphone").value.trim()||!$("caddress").value.trim())return alert("Sila isi nama, telefon dan alamat pelanggan.");let receipt_path="",f=$("file").files[0];if(f){if(f.size>4*1024*1024)return alert("Resit maksimum 4MB.");receipt_path=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f)})}const row={id:"ORD-"+Date.now(),drop_user_id:sessionUser.id,drop_id:profile.drop_id,product:p.name,variant:v.name,qty,sell_price:v.sell,drop_price:v.drop,receipt_path,status:"Pending",tracking:"",colors:!!p.colors,border:p.colors?$("border").value:null,base:p.colors?$("base").value:null,font:p.colors?$("font").value:null,customer_name:$("cname").value.trim(),customer_phone:$("cphone").value.trim(),customer_address:$("caddress").value.trim(),note:$("cnote").value.trim()};const {error}=await sb.from("orders").insert(row);if(error)return alert(error.message);alert("Order berjaya dihantar ke database.");dropOrders()}}
+async function dropOrders(){const {data,error}=await sb.from("orders").select("*").eq("drop_user_id",sessionUser.id).order("created_at",{ascending:false});if(error)return $("app").innerHTML=`<div class="card">${dropNav()}<div class="msg err">${esc(error.message)}</div></div>`;$("app").innerHTML=`<div class="card">${dropNav()}<h2>🧾 List Order Saya</h2>${(data||[]).length?(data||[]).map(o=>`<div class="box"><h3>${esc(o.id)}</h3><p><b>${esc(o.product)}</b> — ${esc(o.variant)}</p><p>Qty: ${o.qty}</p><p>Harga jual: ${money(o.sell_price)}<br>Harga dropship: ${money(o.drop_price)}<br><b>Untung: ${money((Number(o.sell_price)-Number(o.drop_price))*Number(o.qty))}</b></p><p><b>📌 Status: ${esc(o.status||"Pending")}</b></p><p><b>🚚 No Tracking:</b> ${esc(o.tracking||"Belum dimasukkan")}</p><div class="msg"><b>👤 Maklumat Pelanggan</b><br>Nama: ${esc(o.customer_name)}<br>Telefon: ${esc(o.customer_phone)}<br>Alamat: ${esc(o.customer_address)}<br>Catatan: ${esc(o.note||"-")}</div>${o.colors?`<p>🎨 Border: ${esc(o.border)} | Base: ${esc(o.base)} | Font: ${esc(o.font)}</p>`:""}${o.receipt_path?"<p>✅ Resit bayaran dihantar</p>":""}</div>`).join(""):"Belum ada order."}</div>`;bindDrop()}
+async function dropProfit(){const {data}=await sb.from("orders").select("sell_price,drop_price,qty").eq("drop_user_id",sessionUser.id);const mine=data||[];const p=mine.reduce((s,o)=>s+(Number(o.sell_price)-Number(o.drop_price))*Number(o.qty),0);$("app").innerHTML=`<div class="card">${dropNav()}<h2>💰 Keuntungan Saya</h2><div class="grid"><div class="box"><div class="money">${money(p)}</div>Jumlah keuntungan</div><div class="box"><div class="money">${mine.length}</div>Jumlah order</div></div></div>`;bindDrop()}
+function startApp(){
+  home();
+  const s=document.createElement("script");
+  s.src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  s.onload=async()=>{
+    try{
+      sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+      const {data}=await sb.auth.getSession();
+      if(data.session){
+        sessionUser=data.session.user;
+        profile=await getProfile(sessionUser.id);
+        if(profile){
+          await ensureDefaults();
+          profile.role==="admin"?adminDashboard():dropDashboard();
+        }
+      }
+    }catch(e){console.error(e)}
+  };
+  s.onerror=()=>console.error("Supabase library gagal dimuat.");
+  document.head.appendChild(s);
+}
+startApp();
+</script>
+</body></html>
